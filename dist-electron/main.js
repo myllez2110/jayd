@@ -13,7 +13,8 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false
-        }
+        },
+        autoHideMenuBar: true,
     });
     // In development, load from the Vite dev server
     if (process.env.NODE_ENV === 'development') {
