@@ -1,71 +1,29 @@
-#final version for jayd will be a little bit different, since it will be a web app
-#and the download will be done in the backend.
-
 import yt_dlp
 import os
 import browser_cookie3
+import sys
+import json
 
-def detectar_navegador_youtube():
-    try:
-        cj = browser_cookie3.chrome()
-        if any("youtube.com" in cookie.domain for cookie in cj):
-            return 'chrome'
-    except Exception:
-        pass
+def detect_browser():
+    for browser in ['chrome', 'firefox']:
+        try:
+            cj = getattr(browser_cookie3, browser)()
+            if any("youtube.com" in cookie.domain for cookie in cj):
+                return browser
+        except Exception:
+            continue
+    return 'chrome'  # Default to Chrome if no browser detected
 
-    try:
-        cj = browser_cookie3.firefox()
-        if any("youtube.com" in cookie.domain for cookie in cj):
-            return 'firefox'
-    except Exception:
-        pass
+def download_from_youtube(url, output_folder, audio_only=False):
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
-    return None
+    browser = detect_browser()
 
-navegador = detectar_navegador_youtube()
-if navegador:
-    print(f"Browser detectado para cookies: {navegador}")
-else:
-    print("Nenhum cookie do YouTube foi detectado automaticamente.")
-    navegador = input("Digite o navegador (chrome/firefox): ").strip().lower()
-
-playlist_url = input("Digite o link da playlist: ")
-output_folder = input("Digite o caminho da pasta onde os arquivos serão salvos: ")
-
-if not os.path.exists(output_folder):
-    os.makedirs(output_folder)
-
-audio_only = input("Deseja baixar apenas o áudio? (s/n): ").strip().lower() == 's'
-
-if audio_only:
     ydl_opts = {
         'ignoreerrors': True,
-        'format': 'bestaudio/best',
         'outtmpl': os.path.join(output_folder, '%(title)s.%(ext)s'),
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'cookies_from_browser': navegador,
-        'user_agent': (
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
-            'AppleWebKit/537.36 (KHTML, like Gecko) '
-            'Chrome/115.0.0.0 Safari/537.36'
-        ),
-        'noplaylist': False,
-    }
-else:
-    ydl_opts = {
-        'ignoreerrors': True,
-        'format': 'bestvideo[height<=1080]+bestaudio/best',
-        'outtmpl': os.path.join(output_folder, '%(title)s.%(ext)s'),
-        'merge_output_format': 'mp4',
-        'postprocessors': [{
-            'key': 'FFmpegVideoConvertor',
-            'preferedformat': 'mp4',
-        }],
-        'cookies_from_browser': navegador,
+        'cookies_from_browser': browser,
         'user_agent': (
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
             'AppleWebKit/537.36 (KHTML, like Gecko) '
@@ -74,7 +32,39 @@ else:
         'noplaylist': False,
     }
 
-with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-    ydl.download([playlist_url])
+    if audio_only:
+        ydl_opts.update({
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+        })
+    else:
+        ydl_opts.update({
+            'format': 'bestvideo[height<=1080]+bestaudio/best',
+            'merge_output_format': 'mp4',
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',
+            }],
+        })
 
-print("\n🎉 Download concluído!")
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            ydl.download([url])
+        return {"success": True, "message": "Download completed successfully"}
+    except Exception as e:
+        return {"success": False, "message": str(e)}
+
+if __name__ == "__main__":
+    # Expect JSON input from stdin
+    input_data = json.loads(sys.stdin.read())
+    
+    url = input_data.get('url')
+    output_folder = input_data.get('outputPath')
+    audio_only = input_data.get('audioOnly', False)
+    
+    result = download_from_youtube(url, output_folder, audio_only)
+    print(json.dumps(result))
